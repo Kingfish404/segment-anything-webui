@@ -7,7 +7,7 @@ This is a web interface for the [Segment Anything](https://github.com/facebookre
 ## Usage
 
 **Environment Require:**
-Python >= 3.8.13, Node >= 18.15.0 (LTS), Cuda(optional)
+Python >= 3.8.13, Node >= 18.15.0 (LTS), CUDA(optional)
 
 1. Fowllow the instructions in the [Segment Anything](https://github.com/facebookresearch/segment-anything) to install
 
@@ -27,7 +27,7 @@ wget https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth -O mod
 
 ```bash
 # python server as backend
-pip3 install torch numpy 'uvicorn[standard]' fastapi pydantic python-multipart Pillow 
+pip3 install torch numpy 'uvicorn[standard]' fastapi pydantic python-multipart Pillow click
 # or 
 cd script && pip3 install -r requirements.txt
 # webui frontend
@@ -57,9 +57,9 @@ The API in `server.py` is **lambda function**. Though it is slow (Encoding Image
 Upload Image on 
 
 ## TODO
-- [ ] Add CLIP for text Prompt
 - [ ] Pre extract image features
 - [ ] Frontend onnx inference
+- [x] Add CLIP for text Prompt
 - [x] Better compress for mask matrix
 
 ## Reference

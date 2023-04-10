@@ -189,7 +189,7 @@ export function InteractiveSegment(
     }, [height, img, maskAreaThreshold, masks, mode, points, segments, showSegment, width])
 
     return (
-        <div className="flex flex-col max-w-[1080px] "
+        <div className="flex flex-col max-w-[1080px] h-full"
             tabIndex={0}
             onKeyDown={(e) => { if (e.ctrlKey) { setShowSegment(false) } }}
             onKeyUpCapture={(e) => {

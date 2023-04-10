@@ -5,3 +5,4 @@ uvicorn==0.18.3
 pydantic==1.10.2
 python-multipart==0.0.6
 Pillow==9.2.0
+click==8.1.3

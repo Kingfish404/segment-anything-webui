@@ -31,9 +31,9 @@ export default async function handler(
     const readStream = await fs.readFile(filepath)
     const req_data = new FormData()
     req_data.append('file', new Blob([readStream]), 'image')
-    req_data.append('box', fields['box'][0] as string)
+    req_data.append('prompt', fields['prompt'][0])
     const res_data = await fetch(
-        API_URL + '/api/box',
+        API_URL + '/api/clip',
         {
             method: 'POST',
             body: req_data,

@@ -30,9 +30,8 @@ export default async function handler(
     const filepath = file_list[0]['filepath']
     const readStream = await fs.readFile(filepath)
     const req_data = new FormData()
-    const points = fields['points'][0] as string
     req_data.append('file', new Blob([readStream]), 'image')
-    req_data.append('points', points)
+    req_data.append('points', fields['points'][0] as string)
     const res_data = await fetch(
         API_URL + '/api/point',
         {

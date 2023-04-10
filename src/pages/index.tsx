@@ -8,6 +8,7 @@ function Workspace() {
   const [data, setData] = useState<Data | null>(null)
   const [mode, setMode] = useState<'click' | 'box' | 'everything'>('click')
   const [points, setPoints] = useState<Point[]>([])
+  const [prompt, setPrompt] = useState<string>('')
   const [masks, setMasks] = useState<Mask[]>([])
   const [processing, setProcessing] = useState<boolean>(false)
   const [ready, setBoxReady] = useState<boolean>(false)
@@ -159,6 +160,43 @@ function Workspace() {
                   </button>
                 </div>
               </div>
+              <div className='transition-all overflow-hidden my-2 rounded-xl px-4 py-2 cursor-pointer outline outline-gray-200'>
+                <textarea className='w-full h-20 outline outline-gray-200 p-1'
+                  onChange={(e) => {
+                    setPrompt(e.target.value)
+                  }}
+                  value={prompt} />
+                <button
+                  className='overflow-hidden my-2 rounded-xl px-4 py-2 cursor-pointer outline outline-gray-200 bg-white hover:bg-blue-500 hover:text-white'
+                  onClick={(e) => {
+                    if (prompt === '' || !data) return
+                    const fromData = new FormData()
+                    fromData.append('file', new File([data.file], 'image.png'))
+                    fromData.append('prompt',
+                      JSON.stringify({ text: prompt }))
+                    controller.current?.abort()
+                    controller.current = new AbortController()
+                    setProcessing(true)
+                    fetch('/api/clip', {
+                      method: 'POST',
+                      body: fromData,
+                      signal: controller.current?.signal
+                    }).then((res) => {
+                      setProcessing(false)
+                      return res.json()
+                    }).then((res) => {
+                      if (res.code == 0) {
+                        const maskData = res.data.map((mask: any) => {
+                          return mask
+                        })
+                        setMasks(maskData)
+                      }
+                    })
+                  }}
+                >
+                  CLIP Send
+                </button>
+              </div>
               {masks.length > 0 && (
                 <div className='transition-all overflow-hidden my-2 rounded-xl px-4 py-2 cursor-pointer outline outline-gray-200'>
                   <p>Segment</p>
@@ -226,85 +264,87 @@ function Workspace() {
             </div>
           </div>
         </div>
-      </section>
-      {data ?
-        (<div className="relative flex flex-col flex-1 overflow-hidden md:overflow-visible md:px-12 md:py-9">
-          <InteractiveSegment
-            data={data} mode={mode}
-            points={points} setPoints={setPoints} masks={masks} setBoxReady={setBoxReady} />
-          {processing && (
-            <div className=" left-0 w-full flex items-center bg-black bg-opacity-50">
-              <div className="flex flex-col items-center justify-center w-full h-full">
-                <div className="text-white text-2xl">Processing</div>
-                <div className='flex flex-row justify-center'>
-                  <div className='w-2 h-2 bg-white rounded-full animate-bounce mx-1'></div>
-                  <div className='w-2 h-2 bg-white rounded-full animate-bounce mx-1'></div>
-                  <div className='w-2 h-2 bg-white rounded-full animate-bounce mx-1'></div>
+      </section >
+      {
+        data ?
+          (<div className="relative flex flex-col flex-1 overflow-hidden md:overflow-visible md:px-12 md:py-9" >
+            <InteractiveSegment
+              data={data} mode={mode}
+              points={points} setPoints={setPoints} masks={masks} setBoxReady={setBoxReady} />
+            {processing && (
+              <div className=" left-0 w-full flex items-center bg-black bg-opacity-50">
+                <div className="flex flex-col items-center justify-center w-full h-full">
+                  <div className="text-white text-2xl">Processing</div>
+                  <div className='flex flex-row justify-center'>
+                    <div className='w-2 h-2 bg-white rounded-full animate-bounce mx-1'></div>
+                    <div className='w-2 h-2 bg-white rounded-full animate-bounce mx-1'></div>
+                    <div className='w-2 h-2 bg-white rounded-full animate-bounce mx-1'></div>
+                  </div>
+                  <div className="text-white text-sm">Please wait a moment</div>
                 </div>
-                <div className="text-white text-sm">Please wait a moment</div>
               </div>
-            </div>
-          )}
-        </div>) :
-        (<div
-          className="relative flex flex-col flex-1 overflow-hidden md:overflow-visible my-2 md:px-12 md:py-9"
-        >
-          <div
-            className={
-              "flex flex-col items-center justify-center w-full h-96 border-2 border-dashed border-gray-400 rounded-lg " +
-              "hover:border-blue-500 hover:bg-blue-50 hover:text-blue-500" +
-              "focus-within:border-blue-500 focus-within:bg-blue-50 focus-within:text-blue-500"
+            )
             }
-            onDragOver={(e) => {
-              e.preventDefault()
-            }}
-            onDrop={(e) => {
-              e.preventDefault()
-              const file = e.dataTransfer.files[0]
-              if (file) {
-                const img = new Image()
-                img.src = URL.createObjectURL(file)
-                img.onload = () => {
-                  setData({
-                    width: img.width,
-                    height: img.height,
-                    file,
-                    img,
-                  })
-                }
-              }
-            }}
+          </div >) :
+          (<div
+            className="relative flex flex-col flex-1 overflow-hidden md:overflow-visible my-2 md:px-12 md:py-9"
           >
-            <p className="text-sm text-gray-400 md:visible sm:invisible">Drag and drop your image here</p>
-            <p className="text-sm text-gray-400">or</p>
-            <button
-              className="transition-all overflow-hidden false max-h-[40px] my-2 rounded-xl px-4 py-2 cursor-pointer outline outline-gray-200 false false"
-              onClick={() => {
-                const input = document.createElement('input')
-                input.type = 'file'
-                input.accept = 'image/*'
-                input.onchange = (e) => {
-                  const file = (e.target as HTMLInputElement).files?.[0]
-                  if (file) {
-                    const img = new Image()
-                    img.src = URL.createObjectURL(file)
-                    img.onload = () => {
-                      setData({
-                        width: img.width,
-                        height: img.height,
-                        file,
-                        img,
-                      })
-                    }
+            <div
+              className={
+                "flex flex-col items-center justify-center w-full h-96 border-2 border-dashed border-gray-400 rounded-lg " +
+                "hover:border-blue-500 hover:bg-blue-50 hover:text-blue-500" +
+                "focus-within:border-blue-500 focus-within:bg-blue-50 focus-within:text-blue-500"
+              }
+              onDragOver={(e) => {
+                e.preventDefault()
+              }}
+              onDrop={(e) => {
+                e.preventDefault()
+                const file = e.dataTransfer.files[0]
+                if (file) {
+                  const img = new Image()
+                  img.src = URL.createObjectURL(file)
+                  img.onload = () => {
+                    setData({
+                      width: img.width,
+                      height: img.height,
+                      file,
+                      img,
+                    })
                   }
                 }
-                input.click()
               }}
             >
-              Upload a file
-            </button>
-          </div>
-        </div>)
+              <p className="text-sm text-gray-400 md:visible sm:invisible">Drag and drop your image here</p>
+              <p className="text-sm text-gray-400">or</p>
+              <button
+                className="transition-all overflow-hidden false max-h-[40px] my-2 rounded-xl px-4 py-2 cursor-pointer outline outline-gray-200 false false"
+                onClick={() => {
+                  const input = document.createElement('input')
+                  input.type = 'file'
+                  input.accept = 'image/*'
+                  input.onchange = (e) => {
+                    const file = (e.target as HTMLInputElement).files?.[0]
+                    if (file) {
+                      const img = new Image()
+                      img.src = URL.createObjectURL(file)
+                      img.onload = () => {
+                        setData({
+                          width: img.width,
+                          height: img.height,
+                          file,
+                          img,
+                        })
+                      }
+                    }
+                  }
+                  input.click()
+                }}
+              >
+                Upload a file
+              </button>
+            </div>
+          </div>)
       }
     </div >
   )
