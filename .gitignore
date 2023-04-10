@@ -37,3 +37,4 @@ next-env.d.ts
 *tmp*
 *temp*
 *.pth
+*-lock.json

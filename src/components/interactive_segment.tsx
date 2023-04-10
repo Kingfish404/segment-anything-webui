@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 
 export type Point = { x: number, y: number, label: number }
-export type Mask = { bbox: Array<number>, segmentation: Array<Array<number>>, area: number }
+export type Mask = { bbox: Array<number>, segmentation: string, area: number }
 export type Data = { width: number, height: number, file: File, img: HTMLImageElement }
 
 
@@ -21,18 +21,40 @@ function getRGB(idx: number) {
     return [r, g, b]
 }
 
-
-const drawLine = (
-    ctx: CanvasRenderingContext2D, x1: number, y1: number, x2: number, y2: number, rgba: number[], lineWidth = 1, globalAlpha = 0.8
-) => {
-    ctx.beginPath()
-    ctx.moveTo(x1, y1)
-    ctx.lineTo(x2, y2)
-    ctx.strokeStyle = `rgba(${rgba[0]}, ${rgba[1]}, ${rgba[2]}, ${rgba[3]})`
-    ctx.globalAlpha = globalAlpha
-    ctx.lineWidth = lineWidth
-    ctx.stroke()
-    ctx.closePath()
+function decompress(compressed_mask: string, width: number, height: number) {
+    const pairs: [number, number][] = [];
+    let count_str = '';
+    for (const char of compressed_mask) {
+        if (/\d/.test(char)) {
+            count_str += char;
+        } else {
+            pairs.push([parseInt(count_str), char === 'T' ? 1 : 0]);
+            count_str = '';
+        }
+    }
+    const mask = new Array(height).fill(0).map(() => new Array(width).fill(0));
+    let x = 0, y = 0;
+    for (const [count, value] of pairs) {
+        for (let i = 0; i < count; i++) {
+            mask[y][x] = value;
+            x++;
+            if (x === width) {
+                x = 0;
+                y++;
+            }
+        }
+    }
+    // above mask is a 2d mask, convert it to index mask for better performance
+    for (let i = 0; i < height; i++) {
+        let sum = mask[i].reduce((a, b) => a + b, 0)
+        if (sum === 0) {
+            mask[i] = []
+        } else {
+            let indexs = mask[i].map((v, i) => v === 1 ? i : -1).filter(v => v !== -1)
+            mask[i] = indexs
+        }
+    }
+    return mask;
 }
 
 export function InteractiveSegment(
@@ -46,19 +68,32 @@ export function InteractiveSegment(
             setBoxReady: (ready: boolean) => void
         }) {
     const canvasRef = useRef<HTMLCanvasElement>(null)
-    const [showSegment, setShowSegment] = useState<boolean>(true)
     const [scale, setScale] = useState<number>(1)
     const [maskAreaThreshold, setMaskAreaThreshold] = useState<number>(0.5)
-    const { width, height, file: image, img } = data
+    const { width, height, img } = data
+    const [segments, setSegments] = useState<number[][][]>([])
+    const [showSegment, setShowSegment] = useState<boolean>(true)
+
+    useEffect(() => {
+        const adapterSize = () => {
+            const canvas = canvasRef.current as HTMLCanvasElement
+            const parent = canvas.parentElement
+            const scale = Math.min(
+                parent?.clientWidth! / img.width, parent?.clientHeight! / img.height)
+            setScale(scale)
+        }
+        window.onresize = adapterSize;
+        adapterSize();
+    }, [img])
+
+    useEffect(() => {
+        setSegments(masks.map(mask => decompress(mask.segmentation, width, height)))
+    }, [height, masks, width])
 
     useEffect(() => {
         const canvas = canvasRef.current as HTMLCanvasElement
         const ctx = canvas.getContext('2d')
         if (!ctx) return
-        const parent = canvas.parentElement
-        const scale = Math.min(
-            parent?.clientWidth! / img.width, parent?.clientHeight! / img.height)
-        setScale(scale)
         ctx.globalAlpha = 1
         ctx.drawImage(img, 0, 0)
 
@@ -88,51 +123,59 @@ export function InteractiveSegment(
             return
         }
 
+        const rgbas = masks.map((_, i) => [...getRGB(i), 0.5])
         if (masks.length > 0) {
+            ctx.beginPath()
             for (let i = 0; i < masks.length; i++) {
                 const mask = masks[i]
                 if (mask.area / (width * height) > maskAreaThreshold) {
                     continue
                 }
-                const rgba = [...getRGB(i), 0.95]
+                const rgba = rgbas[i]
                 const bbox = mask.bbox
-                ctx.beginPath()
                 ctx.setLineDash([5, 5])
                 ctx.rect((bbox[0]), (bbox[1]), (bbox[2]), (bbox[3]))
                 ctx.strokeStyle = `rgba(${rgba[0]}, ${rgba[1]}, ${rgba[2]}, ${rgba[3]})`
                 ctx.lineWidth = 2
                 ctx.globalAlpha = 0.9
                 ctx.stroke()
-                ctx.closePath()
+            }
+            ctx.closePath()
+        }
 
-                const segmentation = mask.segmentation
-                ctx.setLineDash([0])
-
-                for (let j = 0; j < segmentation.length; j++) {
-                    const segline = segmentation[j]
-                    if (segline.length === 0) {
+        if (segments.length > 0) {
+            ctx.beginPath()
+            ctx.setLineDash([0])
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+            for (let i = 0; i < masks.length; i++) {
+                const mask = masks[i]
+                if (mask.area / (width * height) > maskAreaThreshold) {
+                    continue
+                }
+                const segmentation = segments[i]
+                const rgba = rgbas[i]
+                const opacity = rgba[3]
+                for (let y = 0; y < canvas.height; y++) {
+                    if (segmentation[y].length === 0) {
                         continue
                     }
-                    let index_change = [], index_mark = segline[0]
-                    for (let k = 0; k < segline.length - 1; k++) {
-                        if (segline[k + 1] !== segline[k] + 1) {
-                            index_change.push([index_mark, segline[k]])
-                            index_mark = segline[k + 1]
-                        }
-                    }
-                    index_change.push([index_mark, segline[segline.length - 1]])
-                    for (let index of index_change) {
-                        drawLine(ctx, index[0], j, index[1], j, rgba)
+                    for (let x of segmentation[y]) {
+                        const index = (y * canvas.width + x) * 4;
+                        imageData.data[index] = imageData.data[index] * opacity + rgba[0] * (1 - opacity);
+                        imageData.data[index + 1] = imageData.data[index + 1] * opacity + rgba[1] * (1 - opacity);
+                        imageData.data[index + 2] = imageData.data[index + 2] * opacity + rgba[2] * (1 - opacity);
                     }
                 }
             }
+            ctx.putImageData(imageData, 0, 0);
+            ctx.closePath()
         }
 
         if (points.length > 0) {
+            ctx.globalAlpha = 0.9
             for (let i = 0; i < points.length; i++) {
                 const point = points[i]
                 ctx.beginPath()
-                ctx.globalAlpha = 0.9
                 ctx.arc(point.x, point.y, 5, 0, 2 * Math.PI)
                 if (point.label === 1) {
                     ctx.fillStyle = 'rgba(0, 255, 0, 0.9)'
@@ -143,10 +186,10 @@ export function InteractiveSegment(
                 ctx.closePath()
             }
         }
-    }, [height, img, maskAreaThreshold, masks, mode, points, showSegment, width])
+    }, [height, img, maskAreaThreshold, masks, mode, points, segments, showSegment, width])
 
     return (
-        <div className="flex flex-col h-full items-center justify-center max-w-[1080px] "
+        <div className="flex flex-col max-w-[1080px] "
             tabIndex={0}
             onKeyDown={(e) => { if (e.ctrlKey) { setShowSegment(false) } }}
             onKeyUpCapture={(e) => {

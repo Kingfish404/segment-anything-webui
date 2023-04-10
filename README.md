@@ -6,6 +6,9 @@ This is a web interface for the [Segment Anything](https://github.com/facebookre
 
 ## Usage
 
+**Environment Require:**
+Python >= 3.8.13, Node >= 18.15.0 (LTS), Cuda(optional)
+
 1. Fowllow the instructions in the [Segment Anything](https://github.com/facebookresearch/segment-anything) to install
 
 ```shell
@@ -57,7 +60,7 @@ Upload Image on
 - [ ] Add CLIP for text Prompt
 - [ ] Pre extract image features
 - [ ] Frontend onnx inference
-- [ ] Better compress for mask matrix
+- [x] Better compress for mask matrix
 
 ## Reference
 

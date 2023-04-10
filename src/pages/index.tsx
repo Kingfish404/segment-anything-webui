@@ -40,7 +40,10 @@ function Workspace() {
         return res.json()
       }).then((res) => {
         if (res.code == 0) {
-          setMasks(res.data)
+          const maskData = res.data.map((mask: any) => {
+            return mask
+          })
+          setMasks(maskData)
         }
       })
     }
@@ -70,7 +73,10 @@ function Workspace() {
       }).then((res) => {
         if (res.code == 0) {
           setPoints([])
-          setMasks(res.data)
+          const maskData = res.data.map((mask: any) => {
+            return mask
+          })
+          setMasks(maskData)
         }
       })
     }
@@ -103,7 +109,10 @@ function Workspace() {
           return res.json()
         }).then((res) => {
           if (res.code == 0) {
-            setMasks(res.data)
+            const maskData = res.data.map((mask: any) => {
+              return mask
+            })
+            setMasks(maskData)
           }
         })
         break
@@ -156,7 +165,11 @@ function Workspace() {
                   <button
                     className='transition-all overflow-hidden my-2 rounded-xl px-4 py-2 cursor-pointer outline outline-gray-200'
                     onClick={(e) => {
-                      var datastr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(masks));
+                      var datastr = "data:text/json;charset=utf-8," + encodeURIComponent(
+                        JSON.stringify({
+                          masks: masks,
+                          points: points,
+                        }));
                       var downloadAnchorNode = document.createElement('a');
                       downloadAnchorNode.setAttribute("href", datastr);
                       downloadAnchorNode.setAttribute("download", "masks.json");
@@ -165,12 +178,15 @@ function Workspace() {
                       downloadAnchorNode.remove();
                     }}
                   >
-                    Download All Masks
+                    Download Result
                   </button>
                   <button
                     className='transition-all overflow-hidden my-2 rounded-xl px-4 py-2 cursor-pointer outline outline-gray-200'
                     onClick={(e) => {
-                      navigator.clipboard.writeText(JSON.stringify(masks))
+                      navigator.clipboard.writeText(JSON.stringify({
+                        masks: masks,
+                        points: points,
+                      }))
                       const popup = document.createElement('div')
                       popup.className = 'fixed top-1/2 left-1/2 transform -translate-x-1/2 z-50 bg-white text-gray-500 rounded-xl px-4 py-2'
                       popup.innerHTML = 'Copied'
@@ -180,7 +196,7 @@ function Workspace() {
                       }, 1000)
                     }}
                   >
-                    Copy All Masks
+                    Copy Result
                   </button>
                 </div>
               )}
@@ -212,11 +228,13 @@ function Workspace() {
         </div>
       </section>
       {data ?
-        (<div className="relative flex flex-col h-full items-center justify-center flex-1 overflow-hidden md:overflow-visible md:px-12 md:py-9">
-          <InteractiveSegment data={data} mode={mode} points={points} setPoints={setPoints} masks={masks} setBoxReady={setBoxReady} />
+        (<div className="relative flex flex-col flex-1 overflow-hidden md:overflow-visible md:px-12 md:py-9">
+          <InteractiveSegment
+            data={data} mode={mode}
+            points={points} setPoints={setPoints} masks={masks} setBoxReady={setBoxReady} />
           {processing && (
-            <div className="absolute left-0 w-full flex items-center justify-center bg-black bg-opacity-50">
-              <div className="flex flex-col items-center justify-center">
+            <div className=" left-0 w-full flex items-center bg-black bg-opacity-50">
+              <div className="flex flex-col items-center justify-center w-full h-full">
                 <div className="text-white text-2xl">Processing</div>
                 <div className='flex flex-row justify-center'>
                   <div className='w-2 h-2 bg-white rounded-full animate-bounce mx-1'></div>
@@ -229,7 +247,7 @@ function Workspace() {
           )}
         </div>) :
         (<div
-          className="relative flex flex-col items-center justify-center flex-1 overflow-hidden md:overflow-visible md:px-12 md:py-9"
+          className="relative flex flex-col flex-1 overflow-hidden md:overflow-visible my-2 md:px-12 md:py-9"
         >
           <div
             className={
