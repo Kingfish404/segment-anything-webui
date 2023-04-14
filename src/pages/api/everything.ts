@@ -2,7 +2,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import formidable from "formidable";
 import { promises as fs } from 'fs';
-import { API_URL } from '../../utils/config'
+import * as utils from '@/utils';
 
 export const config = {
     api: {
@@ -32,7 +32,7 @@ export default async function handler(
     const req_data = new FormData()
     req_data.append('file', new Blob([readStream]), 'image')
     const res_data = await fetch(
-        API_URL + '/api/everything',
+        utils.config.API_URL + '/api/everything',
         {
             method: 'POST',
             body: req_data,

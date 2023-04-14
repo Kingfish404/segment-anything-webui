@@ -1,69 +1,21 @@
 import { useState, useEffect, useRef } from 'react'
+import * as utils from '@/utils';
+
 
 export type Point = { x: number, y: number, label: number }
 export type Mask = { bbox: Array<number>, segmentation: string, area: number }
 export type Data = { width: number, height: number, file: File, img: HTMLImageElement }
 
 
-const hash = (x: number) => {
-    x = (x ^ 61) ^ (x >> 16)
-    x = x + (x << 3)
-    x = x ^ (x >> 4)
-    x = x * 0x27d4eb2d
-    x = x ^ (x >> 15)
-    return x
-}
-
-function getRGB(idx: number) {
-    const r = (hash(idx) & 0xFF)
-    const g = (hash(idx >> 8) & 0xFF)
-    const b = (hash(idx >> 16) & 0xFF)
-    return [r, g, b]
-}
-
-function decompress(compressed_mask: string, width: number, height: number) {
-    const pairs: [number, number][] = [];
-    let count_str = '';
-    for (const char of compressed_mask) {
-        if (/\d/.test(char)) {
-            count_str += char;
-        } else {
-            pairs.push([parseInt(count_str), char === 'T' ? 1 : 0]);
-            count_str = '';
-        }
-    }
-    const mask = new Array(height).fill(0).map(() => new Array(width).fill(0));
-    let x = 0, y = 0;
-    for (const [count, value] of pairs) {
-        for (let i = 0; i < count; i++) {
-            mask[y][x] = value;
-            x++;
-            if (x === width) {
-                x = 0;
-                y++;
-            }
-        }
-    }
-    // above mask is a 2d mask, convert it to index mask for better performance
-    for (let i = 0; i < height; i++) {
-        let sum = mask[i].reduce((a, b) => a + b, 0)
-        if (sum === 0) {
-            mask[i] = []
-        } else {
-            let indexs = mask[i].map((v, i) => v === 1 ? i : -1).filter(v => v !== -1)
-            mask[i] = indexs
-        }
-    }
-    return mask;
-}
-
 export function InteractiveSegment(
-    { data, mode, points, setPoints, masks, setBoxReady }:
+    { data, processing, mode, points, setPoints, masks, ready, setBoxReady }:
         {
             data: Data,
+            processing: boolean,
             mode: 'click' | 'box' | 'everything',
             points: Point[],
             masks: Mask[],
+            ready: boolean,
             setPoints: (points: Point[]) => void,
             setBoxReady: (ready: boolean) => void
         }) {
@@ -77,6 +29,7 @@ export function InteractiveSegment(
     useEffect(() => {
         const adapterSize = () => {
             const canvas = canvasRef.current as HTMLCanvasElement
+            if (!canvas) return
             const parent = canvas.parentElement
             const scale = Math.min(
                 parent?.clientWidth! / img.width, parent?.clientHeight! / img.height)
@@ -87,7 +40,7 @@ export function InteractiveSegment(
     }, [img])
 
     useEffect(() => {
-        setSegments(masks.map(mask => decompress(mask.segmentation, width, height)))
+        setSegments(masks.map(mask => utils.decompress(mask.segmentation, width, height)))
     }, [height, masks, width])
 
     useEffect(() => {
@@ -123,7 +76,7 @@ export function InteractiveSegment(
             return
         }
 
-        const rgbas = masks.map((_, i) => [...getRGB(i), 0.5])
+        const rgbas = masks.map((_, i) => [...utils.getRGB(i), 0.5])
         if (masks.length > 0) {
             ctx.beginPath()
             for (let i = 0; i < masks.length; i++) {
@@ -189,7 +142,7 @@ export function InteractiveSegment(
     }, [height, img, maskAreaThreshold, masks, mode, points, segments, showSegment, width])
 
     return (
-        <div className="flex flex-col max-w-[1080px] h-full"
+        <div
             tabIndex={0}
             onKeyDown={(e) => { if (e.ctrlKey) { setShowSegment(false) } }}
             onKeyUpCapture={(e) => {
@@ -225,9 +178,10 @@ export function InteractiveSegment(
                 </label>
             </div>
             <canvas
-                className="w-3/4 sm:w-full" ref={canvasRef} width={width} height={height}
+                className="w-full" ref={canvasRef} width={width} height={height}
                 onContextMenu={(e) => {
                     e.preventDefault()
+                    if (processing) return
                     const canvas = canvasRef.current as HTMLCanvasElement
                     const rect = canvas.getBoundingClientRect()
                     const x = (e.clientX - rect.left) / scale
@@ -240,6 +194,7 @@ export function InteractiveSegment(
                 }}
                 onClick={(e) => {
                     e.preventDefault()
+                    if (processing) return
                     const canvas = canvasRef.current as HTMLCanvasElement
                     const rect = canvas.getBoundingClientRect()
                     const x = (e.clientX - rect.left) / scale
@@ -251,12 +206,12 @@ export function InteractiveSegment(
                     }
                 }}
                 onMouseMove={(e) => {
-                    if (mode !== 'box') return
+                    if (mode !== 'box' || processing) return
                     const canvas = canvasRef.current as HTMLCanvasElement
                     const rect = canvas.getBoundingClientRect()
                     const x = (e.clientX - rect.left) / scale
                     const y = (e.clientY - rect.top) / scale
-                    if (e.buttons === 0 && points.length <= 1) {
+                    if (e.buttons === 0 && !ready) {
                         setPoints([{ x, y, label: 1 }])
                     } else if (e.buttons === 1 && points.length >= 1) {
                         setBoxReady(false)
@@ -264,7 +219,7 @@ export function InteractiveSegment(
                     }
                 }}
                 onMouseUp={(e) => {
-                    if (mode !== 'box') return
+                    if (mode !== 'box' || processing) return
                     setBoxReady(true)
                 }}
             />

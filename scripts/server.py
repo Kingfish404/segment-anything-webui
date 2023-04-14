@@ -11,6 +11,7 @@ from typing import Sequence, Callable
 from segment_anything import SamPredictor, SamAutomaticMaskGenerator, sam_model_registry
 from PIL import Image
 from typing_extensions import Annotated
+from threading import Lock
 
 
 class Point(BaseModel):
@@ -80,6 +81,7 @@ def main(
     model = build_sam(checkpoint=model_path).to(device)
     predictor = SamPredictor(model)
     mask_generator = SamAutomaticMaskGenerator(model)
+    model_lock = Lock()
 
     clip_model, preprocess = clip.load("ViT-B/16", device=device)
 
@@ -109,13 +111,14 @@ def main(
         input_labels = np.array(ps.points_labels)
         image_data = Image.open(io.BytesIO(file))
         image_data = np.array(image_data)
-        predictor.set_image(image_data)
-        masks, scores, logits = predictor.predict(
-            point_coords=input_points,
-            point_labels=input_labels,
-            multimask_output=True,
-        )
-        predictor.reset_image()
+        with model_lock:
+            predictor.set_image(image_data)
+            masks, scores, logits = predictor.predict(
+                point_coords=input_points,
+                point_labels=input_labels,
+                multimask_output=True,
+            )
+            predictor.reset_image()
         masks = [
             {
                 "segmentation": compress_mask(np.array(mask)),
@@ -135,18 +138,15 @@ def main(
     ):
         b = Box.parse_raw(box)
         input_box = np.array([b.x1, b.y1, b.x2, b.y2])
-        center_point = np.array([[(b.x1 + b.x2) / 2, (b.y1 + b.y2) / 2]])
-        center_label = np.array([1])
         image_data = Image.open(io.BytesIO(file))
         image_data = np.array(image_data)
-        predictor.set_image(image_data)
-        masks, scores, logits = predictor.predict(
-            point_coords=center_point,
-            point_labels=center_label,
-            box=input_box,
-            multimask_output=False,
-        )
-        predictor.reset_image()
+        with model_lock:
+            predictor.set_image(image_data)
+            masks, scores, logits = predictor.predict(
+                box=input_box,
+                multimask_output=False,
+            )
+            predictor.reset_image()
         masks = [
             {
                 "segmentation": compress_mask(np.array(mask)),
