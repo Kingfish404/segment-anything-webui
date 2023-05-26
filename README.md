@@ -23,7 +23,7 @@ wget https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth -O mod
 # https://dl.fbaipublicfiles.com/segment_anything/sam_vit_h_4b8939.pth
 
 # e.g. for CLIP
-pip install pytorch torchvision
+pip install torch torchvision
 pip install ftfy regex tqdm
 pip install git+https://github.com/openai/CLIP.git
 
@@ -40,6 +40,11 @@ npm i
 ```bash
 python3 scripts/server.py   # webui backend
 npm run dev                 # interactive webui frontend
+```
+
+Or
+```shell
+docker compose up
 ```
 
 ## Advanced

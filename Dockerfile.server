@@ -1,0 +1,17 @@
+# syntax=docker/dockerfile:1
+
+FROM nikolaik/python-nodejs:python3.11-nodejs18	
+WORKDIR /app
+COPY . .
+RUN pip install git+https://github.com/facebookresearch/segment-anything.git
+RUN pip install opencv-python pycocotools matplotlib onnxruntime onnx
+
+RUN mkdir -p model
+RUN wget --no-clobber https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth -O model/sam_vit_b_01ec64.pth
+RUN pip install torch torchvision ftfy regex tqdm
+RUN pip install git+https://github.com/openai/CLIP.git
+
+RUN pip install -r scripts/requirements.txt
+
+CMD ["python3" ,"scripts/server.py"]
+EXPOSE 8000
