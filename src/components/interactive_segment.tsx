@@ -20,6 +20,7 @@ export function InteractiveSegment(
             setBoxReady: (ready: boolean) => void
         }) {
     const canvasRef = useRef<HTMLCanvasElement>(null)
+    const canvasMaskRef = useRef<HTMLCanvasElement>(null)
     const [scale, setScale] = useState<number>(1)
     const [maskAreaThreshold, setMaskAreaThreshold] = useState<number>(0.5)
     const { width, height, img } = data
@@ -45,8 +46,11 @@ export function InteractiveSegment(
 
     useEffect(() => {
         const canvas = canvasRef.current as HTMLCanvasElement
+        const canvasMask = canvasMaskRef.current as HTMLCanvasElement
         const ctx = canvas.getContext('2d')
+        const ctxMask = canvasMask.getContext('2d')
         if (!ctx) return
+        if (!ctxMask) return
         ctx.globalAlpha = 1
         ctx.drawImage(img, 0, 0)
 
@@ -100,6 +104,8 @@ export function InteractiveSegment(
             ctx.beginPath()
             ctx.setLineDash([0])
             const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+            const imageDataMask = ctxMask.getImageData(0, 0, canvasMask.width, canvasMask.height)
+            imageDataMask.data.fill(255)
             for (let i = 0; i < masks.length; i++) {
                 const mask = masks[i]
                 if (mask.area / (width * height) > maskAreaThreshold) {
@@ -117,11 +123,16 @@ export function InteractiveSegment(
                         imageData.data[index] = imageData.data[index] * opacity + rgba[0] * (1 - opacity);
                         imageData.data[index + 1] = imageData.data[index + 1] * opacity + rgba[1] * (1 - opacity);
                         imageData.data[index + 2] = imageData.data[index + 2] * opacity + rgba[2] * (1 - opacity);
+                        imageDataMask.data[index] = opacity
+                        imageDataMask.data[index + 1] = opacity
+                        imageDataMask.data[index + 2] = opacity
                     }
                 }
             }
             ctx.putImageData(imageData, 0, 0);
+            ctxMask.putImageData(imageDataMask, 0, 0);
             ctx.closePath()
+            ctxMask.closePath()
         }
 
         if (points.length > 0) {
@@ -140,6 +151,15 @@ export function InteractiveSegment(
             }
         }
     }, [height, img, maskAreaThreshold, masks, mode, points, segments, showSegment, width])
+
+    const handleDownload = () => {
+        const canvas = canvasMaskRef.current as HTMLCanvasElement;
+        const link = document.createElement('a');
+        link.href = canvas.toDataURL('image/png');
+        link.download = 'mask.png';
+        link.click();
+        link.remove();
+    }
 
     return (
         <div
@@ -175,6 +195,9 @@ export function InteractiveSegment(
                         onChange={(e) => setShowSegment(e.target.checked)}
                         className="ml-2"
                     />
+                </label>
+                <label className="inline-block text-sm font-medium text-gray-700">
+                    <button onClick={handleDownload}>Download Mask</button>
                 </label>
             </div>
             <canvas
@@ -222,6 +245,9 @@ export function InteractiveSegment(
                     if (mode !== 'box' || processing) return
                     setBoxReady(true)
                 }}
+            />
+            <canvas
+                className="w-full" ref={canvasMaskRef} width={width} height={height}
             />
         </div>
     )
