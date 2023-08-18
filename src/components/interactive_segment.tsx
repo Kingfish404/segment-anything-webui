@@ -8,20 +8,24 @@ export type Data = { width: number, height: number, file: File, img: HTMLImageEl
 
 
 export function InteractiveSegment(
-    { data, processing, mode, points, setPoints, masks, ready, setBoxReady }:
+    { data, processing, mode, points, setPoints, masks, ready, setBoxReady, maskImage,
+        scale, setScale,
+    }:
         {
             data: Data,
             processing: boolean,
-            mode: 'click' | 'box' | 'everything',
+            mode: 'click' | 'box' | 'everything' | 'embedding',
             points: Point[],
             masks: Mask[],
             ready: boolean,
             setPoints: (points: Point[]) => void,
-            setBoxReady: (ready: boolean) => void
+            setBoxReady: (ready: boolean) => void,
+            maskImage: ImageData | null,
+            scale: number,
+            setScale: (scale: number) => void,
         }) {
     const canvasRef = useRef<HTMLCanvasElement>(null)
     const canvasMaskRef = useRef<HTMLCanvasElement>(null)
-    const [scale, setScale] = useState<number>(1)
     const [maskAreaThreshold, setMaskAreaThreshold] = useState<number>(0.5)
     const { width, height, img } = data
     const [segments, setSegments] = useState<number[][][]>([])
@@ -42,7 +46,7 @@ export function InteractiveSegment(
 
     useEffect(() => {
         setSegments(masks.map(mask => utils.decompress(mask.segmentation, width, height)))
-    }, [height, masks, width])
+    }, [masks, height, width])
 
     useEffect(() => {
         const canvas = canvasRef.current as HTMLCanvasElement
@@ -55,9 +59,9 @@ export function InteractiveSegment(
         ctx.drawImage(img, 0, 0)
 
         switch (mode) {
-            case 'click':
+            case 'click': { }
                 break
-            case 'box':
+            case 'box': {
                 if (points.length === 2) {
                     const x = Math.min(points[0].x, points[1].x)
                     const y = Math.min(points[0].y, points[1].y)
@@ -71,8 +75,26 @@ export function InteractiveSegment(
                     ctx.stroke()
                     ctx.closePath()
                 }
+            }
                 break
-            case 'everything':
+            case 'everything': { }
+                break
+            case 'embedding': {
+                ctxMask.clearRect(0, 0, canvasMask.width, canvasMask.height);
+
+                if (maskImage) {
+                    const canvas = utils.imageDataToCanvas(maskImage);
+                    const yscale = 1.2  // TODO: fix this magic number
+                    ctx.scale(1, yscale)
+                    ctxMask.scale(1, yscale)
+
+                    ctx.drawImage(canvas, 0, 0);
+                    ctxMask.drawImage(canvas, 0, 0);
+
+                    ctxMask.scale(1, 1 / yscale)
+                    ctx.scale(1, 1 / yscale)
+                }
+            }
                 break
         }
 
@@ -150,7 +172,7 @@ export function InteractiveSegment(
                 ctx.closePath()
             }
         }
-    }, [height, img, maskAreaThreshold, masks, mode, points, segments, showSegment, width])
+    }, [height, img, maskAreaThreshold, maskImage, masks, mode, points, segments, showSegment, width])
 
     const handleDownload = () => {
         const canvas = canvasMaskRef.current as HTMLCanvasElement;
@@ -193,11 +215,13 @@ export function InteractiveSegment(
                         type="checkbox"
                         checked={showSegment}
                         onChange={(e) => setShowSegment(e.target.checked)}
-                        className="ml-2"
+                        className="mx-2"
                     />
                 </label>
                 <label className="inline-block text-sm font-medium text-gray-700">
-                    <button onClick={handleDownload}>Download Mask</button>
+                    <button onClick={handleDownload}
+                        className='border-2 border-gray-300 rounded-md px-2 text-gray-700 hover:bg-gray-50'
+                    >Download Mask</button>
                 </label>
             </div>
             <canvas
@@ -226,19 +250,26 @@ export function InteractiveSegment(
                         case 'click':
                             setPoints([...points, { x, y, label: 1 }])
                             break
+                        case 'embedding':
+                            setPoints([{ x, y, label: 1 }])
+                            break
                     }
                 }}
                 onMouseMove={(e) => {
-                    if (mode !== 'box' || processing) return
-                    const canvas = canvasRef.current as HTMLCanvasElement
-                    const rect = canvas.getBoundingClientRect()
-                    const x = (e.clientX - rect.left) / scale
-                    const y = (e.clientY - rect.top) / scale
-                    if (e.buttons === 0 && !ready) {
-                        setPoints([{ x, y, label: 1 }])
-                    } else if (e.buttons === 1 && points.length >= 1) {
-                        setBoxReady(false)
-                        setPoints([points[0], { x, y, label: 1 }])
+                    if (processing) return
+                    switch (mode) {
+                        case 'box':
+                            const canvas = canvasRef.current as HTMLCanvasElement
+                            const rect = canvas.getBoundingClientRect()
+                            const x = (e.clientX - rect.left) / scale
+                            const y = (e.clientY - rect.top) / scale
+                            if (e.buttons === 0 && !ready) {
+                                setPoints([{ x, y, label: 1 }])
+                            } else if (e.buttons === 1 && points.length >= 1) {
+                                setBoxReady(false)
+                                setPoints([points[0], { x, y, label: 1 }])
+                            }
+                            break
                     }
                 }}
                 onMouseUp={(e) => {
@@ -247,7 +278,7 @@ export function InteractiveSegment(
                 }}
             />
             <canvas
-                className="w-full" ref={canvasMaskRef} width={width} height={height}
+                className="w-full mt-1" ref={canvasMaskRef} width={width} height={height}
             />
         </div>
     )

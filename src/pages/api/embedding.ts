@@ -21,11 +21,8 @@ export default async function handler(
     const readStream = await fs.readFile(filepath)
     const req_data = new FormData()
     req_data.append('file', new Blob([readStream]), 'image')
-    req_data.append('points', fields['points'][0] as string)
-
-    const req_stream = req.read()
     const res_data = await fetch(
-        utils.config.API_URL + '/api/point',
+        utils.config.API_URL + '/api/embedding',
         {
             method: 'POST',
             body: req_data,

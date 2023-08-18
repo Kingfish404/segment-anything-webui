@@ -7,7 +7,7 @@ This is a web interface for the [Segment Anything](https://github.com/facebookre
 ## Usage
 
 **Environment Require:**
-Python >= 3.8.13, Node >= 18.15.0 (LTS), CUDA(optional)
+Python >= 3.8.13, Node >= 18.15.0 (LTS), CUDA or MPS(optional)
 
 1. Fowllow the instructions in the [Segment Anything](https://github.com/facebookresearch/segment-anything) and [CLIP](https://github.com/openai/CLIP) to install SAM and CLIP. And prepare webui environment:
 
@@ -54,12 +54,6 @@ Change the `.env.local` file to change the server address.
 The model server can be run on a remote GUI server, and the webui can be run on a local machine.
 
 The API in `server.py` is **Pure Function**. Though it is slow (Encoding Image Each Request), it is easy to deploy and maintain.
-
-## TODO
-- [ ] Pre extract image features
-- [ ] Frontend onnx inference
-- [x] Add CLIP for text Prompt
-- [x] Better compress for mask matrix
 
 ## Reference
 

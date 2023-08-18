@@ -1,10 +1,13 @@
 import io
+import os
 import click
+from fastapi.responses import FileResponse
 import torch
 import numpy as np
 import uvicorn
 import clip
 
+import export_onnx_model
 from fastapi import FastAPI, File, Form
 from pydantic import BaseModel
 from typing import Sequence, Callable
@@ -68,20 +71,24 @@ def retrieve(
 @click.option('--model_path', default='model/sam_vit_b_01ec64.pth', help='model path')
 @click.option('--port', default=8000, help='port')
 @click.option('--host', default='0.0.0.0', help='host')
-def main(
-        model="vit_b",
-        model_path="model/sam_vit_b_01ec64.pth",
-        port=8000,
-        host="0.0.0.0",
-):
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+def main(model, model_path, port, host, ):
+    device = torch.device("cpu")
+    try:
+        if torch.backends.mps.is_available():
+            device = torch.device("mps")
+    except:
+        device = torch.device("cpu")
+    device = torch.device("cuda") if torch.cuda.is_available() else device
     print("device:", device)
 
     build_sam = sam_model_registry[model]
-    model = build_sam(checkpoint=model_path).to(device)
-    predictor = SamPredictor(model)
-    mask_generator = SamAutomaticMaskGenerator(model)
-    model_lock = Lock()
+    sam = build_sam(checkpoint=model_path).to(device)
+    onnx_model_path = model_path.replace('.pth', '.onnx')
+    if not os.path.exists(onnx_model_path):
+        export_onnx_model.export(sam, onnx_model_path)
+    predictor = SamPredictor(sam)
+    mask_generator = SamAutomaticMaskGenerator(sam)
+    sam_model_lock = Lock()
 
     clip_model, preprocess = clip.load("ViT-B/16", device=device)
 
@@ -90,6 +97,10 @@ def main(
     @app.get('/')
     def index():
         return {"code": 0, "data": "Hello World"}
+
+    @app.get('/sam_vit.onnx')
+    def forward_onnx():
+        return FileResponse(onnx_model_path)
 
     def compress_mask(mask: np.ndarray):
         flat_mask = mask.ravel()
@@ -110,9 +121,9 @@ def main(
         input_points = np.array([[p.x, p.y] for p in ps.points])
         input_labels = np.array(ps.points_labels)
         image_data = Image.open(io.BytesIO(file))
-        image_data = np.array(image_data)
-        with model_lock:
-            predictor.set_image(image_data)
+        image_array = np.array(image_data)
+        with sam_model_lock:
+            predictor.set_image(image_array)
             masks, scores, logits = predictor.predict(
                 point_coords=input_points,
                 point_labels=input_labels,
@@ -139,9 +150,9 @@ def main(
         b = Box.parse_raw(box)
         input_box = np.array([b.x1, b.y1, b.x2, b.y2])
         image_data = Image.open(io.BytesIO(file))
-        image_data = np.array(image_data)
-        with model_lock:
-            predictor.set_image(image_data)
+        image_array = np.array(image_data)
+        with sam_model_lock:
+            predictor.set_image(image_array)
             masks, scores, logits = predictor.predict(
                 box=input_box,
                 multimask_output=False,
@@ -192,6 +203,19 @@ def main(
         for mask in masks:
             mask['segmentation'] = compress_mask(mask['segmentation'])
         return {"code": 0, "data": masks[:]}
+
+    @app.post('/api/embedding')
+    async def api_embedding(
+        file: Annotated[bytes, File()],
+    ):
+        image_data = Image.open(io.BytesIO(file))
+        image_array = np.array(image_data)
+        with sam_model_lock:
+            predictor.set_image(image_array)
+            image_embedding = predictor.get_image_embedding()
+            predictor.reset_image()
+        print(image_embedding.shape)
+        return {"code": 0, "data": image_embedding.tolist()}
 
     uvicorn.run(app, host=host, port=port)
 

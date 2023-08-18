@@ -3,6 +3,7 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import formidable from "formidable";
 import { promises as fs } from 'fs';
 import * as utils from '@/utils';
+import * as utils_api from '@/utils_api';
 
 export const config = {
     api: {
@@ -14,18 +15,7 @@ export const config = {
 export default async function handler(
     req: NextApiRequest,
     res: NextApiResponse<Response>) {
-    fs.mkdir('./tmp/', { recursive: true })
-    const form = formidable({ uploadDir: './tmp/', maxTotalFileSize: 1024 * 1024 })
-    const { fields, files } =
-        await new Promise<{ fields: formidable.Fields; files: formidable.Files; }>((resolve, reject) => {
-            form.parse(req, async function (err, fields, files) {
-                if (err) {
-                    reject(err);
-                    return;
-                }
-                resolve({ fields, files });
-            });
-        })
+    const { fields, files } = await utils_api.parser_fields_and_file(req)
     const file_list = files['file'] as formidable.File[]
     const filepath = file_list[0]['filepath']
     const readStream = await fs.readFile(filepath)

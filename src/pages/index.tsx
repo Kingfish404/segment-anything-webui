@@ -1,9 +1,12 @@
 import Head from 'next/head'
 import { useState, useEffect, useRef } from 'react'
+import { InferenceSession, Tensor } from "onnxruntime-web";
 import { InteractiveSegment, Point, Mask, Data }
   from '../components/interactive_segment'
+import * as ort from 'onnxruntime-web';
+import * as utils from '@/utils';
 
-const uiBasiclClassName = 'transition-all my-2 rounded-xl px-4 py-2 cursor-pointer outline outline-gray-200 ';
+const uiBasiclClassName = 'transition-all my-2 rounded-xl px-4 py-2 cursor-pointer outline outline-gray-200 text-left ';
 const uiActiveClassName = 'bg-blue-500 text-white';
 const uiInactiveClassName = 'bg-white text-gray-400';
 
@@ -20,99 +23,110 @@ function Popup(text: string, timeout: number = 1000) {
 
 function Workspace() {
   const [data, setData] = useState<Data | null>(null)
-  const [mode, setMode] = useState<'click' | 'box' | 'everything'>('click')
+  const [embeddingData, setEmbeddingData] = useState<ort.Tensor>()
+  const [mode, setMode] = useState<'click' | 'box' | 'everything' | 'embedding'>('click')
   const [points, setPoints] = useState<Point[]>([])
   const [masks, setMasks] = useState<Mask[]>([])
+  const [maskImage, setMaskImage] = useState<ImageData | null>(null)
   const [prompt, setPrompt] = useState<string>('')
   const [processing, setProcessing] = useState<boolean>(false)
   const [ready, setBoxReady] = useState<boolean>(false)
-  const controller = useRef<AbortController | null>()
+  const controller = useRef<AbortController>(new AbortController())
+  const [scale, setScale] = useState<number>(1)
+
+  const [model, setModel] = useState<InferenceSession | null>(null); // ONNX model
+
 
   useEffect(() => {
     if (!data) return
-    if (mode === 'click' && points.length > 0) {
-      const fromData = new FormData()
-      fromData.append('file', new File([data.file], 'image.png'))
-      const points_list = points.map((p) => {
-        return {
-          x: Math.round(p.x),
-          y: Math.round(p.y)
-        }
-      })
-      const points_labels = points.map((p) => p.label)
-      fromData.append('points', JSON.stringify(
-        { points: points_list, points_labels }
-      ))
-      controller.current?.abort()
-      controller.current = new AbortController()
-      setProcessing(true)
-      fetch('/api/point', {
-        method: 'POST',
-        body: fromData,
-        signal: controller.current?.signal,
-      }).then((res) => {
-        return res.json()
-      }).then((res) => {
-        if (res.code == 0) {
-          const maskData = res.data.map((mask: any) => {
-            return mask
-          })
-          setMasks(maskData)
-        }
-      }).finally(() => {
-        setProcessing(false)
-      })
-    }
-    if (mode === 'box') {
-      if (!ready) return
-      if (points.length !== 2) return
-      const fromData = new FormData()
-      fromData.append('file', new File([data.file], 'image.png'))
-      fromData.append('box', JSON.stringify(
-        {
-          x1: Math.round(points[0].x),
-          y1: Math.round(points[0].y),
-          x2: Math.round(points[1].x),
-          y2: Math.round(points[1].y),
-        }
-      ))
-      controller.current?.abort()
-      controller.current = new AbortController()
-      setProcessing(true)
-      fetch('/api/box', {
-        method: 'POST',
-        body: fromData,
-        signal: controller.current?.signal
-      }).then((res) => {
-        return res.json()
-      }).then((res) => {
-        if (res.code == 0) {
-          setPoints([])
-          const maskData = res.data.map((mask: any) => {
-            return mask
-          })
-          setMasks(maskData)
-        }
-      }).finally(() => {
-        setProcessing(false)
-        setBoxReady(false)
-      })
-    }
-  }, [data, mode, points, ready])
-
-  useEffect(() => {
-    setPoints([])
-    setMasks([])
-    setProcessing(false)
     switch (mode) {
-      case 'click':
+      case 'click': {
+        if (points.length === 0) return
+        const fromData = new FormData()
+        fromData.append('file', new File([data.file], 'image.png'))
+        const points_list = points.map((p) => {
+          return {
+            x: Math.round(p.x),
+            y: Math.round(p.y)
+          }
+        })
+        const points_labels = points.map((p) => p.label)
+        fromData.append('points', JSON.stringify(
+          { points: points_list, points_labels }
+        ))
+        controller.current?.abort()
+        controller.current = new AbortController()
+        setProcessing(true)
+        fetch('/api/point', {
+          method: 'POST',
+          body: fromData,
+          signal: controller.current?.signal,
+        }).then((res) => {
+          return res.json()
+        }).then((res) => {
+          if (res.code == 0) {
+            const maskData = res.data.map((mask: any) => {
+              return mask
+            })
+            setMasks(maskData)
+          }
+        }).finally(() => {
+          setProcessing(false)
+        })
+      }
         break
-      case 'box':
+      case 'box': {
+        if (!ready) return
+        if (points.length !== 2) return
+        const fromData = new FormData()
+        fromData.append('file', new File([data.file], 'image.png'))
+        fromData.append('box', JSON.stringify(
+          {
+            x1: Math.round(points[0].x),
+            y1: Math.round(points[0].y),
+            x2: Math.round(points[1].x),
+            y2: Math.round(points[1].y),
+          }
+        ))
+        controller.current?.abort()
+        controller.current = new AbortController()
+        setProcessing(true)
+        fetch('/api/box', {
+          method: 'POST',
+          body: fromData,
+          signal: controller.current?.signal
+        }).then((res) => {
+          return res.json()
+        }).then((res) => {
+          if (res.code == 0) {
+            setPoints([])
+            const maskData = res.data.map((mask: any) => {
+              return mask
+            })
+            setMasks(maskData)
+          }
+        }).finally(() => {
+          setProcessing(false)
+          setBoxReady(false)
+        })
+      }
         break
-      case 'everything':
+      case 'embedding': {
+        if (model == null || embeddingData == null) return
+        if (points.length === 0) return
+        const infer = utils.inferData({ clicks: points, tensor: embeddingData, modelScale: { samScale: 1, height: data.height, width: data.width } });
+        if (infer) {
+          model?.run(infer).then((res) => {
+            const output = res[model.outputNames[0]];
+            const imageData = utils.arrayToImageData(output.data, output.dims[2], output.dims[3]);
+            setMaskImage(imageData)
+          })
+        }
+      }
         break
     }
-  }, [mode])
+
+  }, [data, embeddingData, mode, model, points, ready, scale])
 
   const handleTextPrompt = () => {
     if (prompt === '' || !data) return
@@ -141,6 +155,8 @@ function Workspace() {
   }
 
   const handleEverything = () => {
+    setPoints([])
+    setMasks([])
     setMode('everything')
     if (!data) return
     const fromData = new FormData()
@@ -165,10 +181,52 @@ function Workspace() {
     })
   }
 
+  const handleEmbedding = () => {
+    setPoints([])
+    setMasks([])
+    setMode('embedding')
+    if (!data) return
+    const loadModel = async () => {
+      const URL = '/api/model/onnx.onnx'
+      const model = await InferenceSession.create(URL);
+      setModel(model)
+    }
+    if (model == null) {
+      loadModel()
+    }
+    const fromData = new FormData()
+    fromData.append('file', new File([data.file], 'image.png'))
+    controller.current?.abort()
+    controller.current = new AbortController()
+    setProcessing(true)
+    fetch('/api/embedding', {
+      method: 'POST',
+      body: fromData,
+      signal: controller.current?.signal
+    }).then((res) => {
+      return res.json()
+    }).then((res) => {
+      setProcessing(false)
+      if (res.code == 0) {
+        const resdata: Array<Array<Array<Array<number>>>> = res.data
+        const shareData = new Float32Array(resdata[0].length * resdata[0][0].length * resdata[0][0][0].length)
+        for (let i = 0; i < resdata[0].length; i++) {
+          for (let j = 0; j < resdata[0][0].length; j++) {
+            for (let k = 0; k < resdata[0][0][0].length; k++) {
+              shareData[i * resdata[0][0].length * resdata[0][0][0].length + j * resdata[0][0][0].length + k] = resdata[0][i][j][k]
+            }
+          }
+        }
+        const tensor = new ort.Tensor("float32", shareData, [1, resdata[0].length, resdata[0][0].length, resdata[0][0][0].length])
+        setEmbeddingData(tensor)
+      }
+    })
+  }
+
 
   return (
     <div className="flex items-stretch justify-center flex-1 stage min-h-fit">
-      <section className="flex-col hidden min-w-[225px] w-1/5 py-5 overflow-y-auto md:flex lg:w-72">
+      <section className="flex-col hidden min-w-[225px] w-1/5 py-5 md:flex lg:w-72">
         <div className='shadow-[0px_0px_5px_5px_#00000024] rounded-xl mx-2'>
           <div className='p-4 pt-5'>
             <p className='text-lg font-semibold'>Tools</p>
@@ -181,8 +239,13 @@ function Workspace() {
                       uiBasiclClassName +
                       (mode === 'click' ? uiActiveClassName : uiInactiveClassName)
                     }
-                    onClick={() => { setMode('click') }} >
-                    Click
+                    onClick={() => {
+                      setPoints([])
+                      setMasks([])
+                      setProcessing(false)
+                      setMode('click')
+                    }} >
+                    Click Mode
                   </button>
                 </div>
                 <div>
@@ -191,8 +254,23 @@ function Workspace() {
                       uiBasiclClassName +
                       (mode === 'box' ? uiActiveClassName : uiInactiveClassName)
                     }
-                    onClick={() => { setMode('box') }} >
-                    Box
+                    onClick={() => {
+                      setPoints([])
+                      setMasks([])
+                      setProcessing(false)
+                      setMode('box')
+                    }} >
+                    Box Mode
+                  </button>
+                </div>
+                <div>
+                  <button
+                    className={
+                      uiBasiclClassName +
+                      (mode === 'embedding' ? uiActiveClassName : uiInactiveClassName)
+                    }
+                    onClick={handleEmbedding} >
+                    Get Embedding (SAM ONNX)
                   </button>
                 </div>
                 <div>
@@ -201,8 +279,8 @@ function Workspace() {
                       uiBasiclClassName +
                       (mode === 'everything' ? uiActiveClassName : uiInactiveClassName)
                     }
-                    onClick={handleEverything} >
-                    Everything
+                    onClick={(handleEverything)} >
+                    Get Everything
                   </button>
                 </div>
               </div>
@@ -262,6 +340,7 @@ function Workspace() {
                 onClick={() => {
                   setPoints([])
                   setMasks([])
+                  setMaskImage(null)
                   setBoxReady(false)
                   setProcessing(false)
                 }} >
@@ -271,9 +350,12 @@ function Workspace() {
                 className='false my-2 rounded-xl px-4 py-2 cursor-pointer outline outline-gray-200'
                 onClick={() => {
                   setData(null)
+                  setMode('click')
                   setPoints([])
                   setMasks([])
-                  setMode('click')
+                  setMaskImage(null)
+                  setBoxReady(false)
+                  setProcessing(false)
                 }} >
                 Clean All
               </button>
@@ -283,13 +365,15 @@ function Workspace() {
       </section >
       {
         data ?
-          (<div className="flex flex-1 flex-col max-w-[1080px] m-auto my-2 md:px-12 md:py-9" >
+          (<div className="relative flex flex-1 flex-col
+           max-h-[calc(100vh-100px)] overflow-y-scroll
+           max-w-[1080px] m-auto my-2 md:px-12 md:py-9" >
             <InteractiveSegment
               data={data} mode={mode} processing={processing}
-              points={points} setPoints={setPoints} masks={masks}
+              points={points} setPoints={setPoints} masks={masks} maskImage={maskImage} scale={scale} setScale={setScale}
               ready={ready} setBoxReady={setBoxReady} />
             {processing && (
-              <div className=" left-0 w-full flex items-center bg-black bg-opacity-50">
+              <div className="absolute left-0 top-1/2 w-full flex items-center bg-black bg-opacity-50">
                 <div className="flex flex-col items-center justify-center w-full h-full">
                   <div className="text-white text-2xl">Processing</div>
                   <div className='flex flex-row justify-center'>

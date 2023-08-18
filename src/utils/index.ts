@@ -1,5 +1,5 @@
 export * as config from './config';
-
+export * from './onnx';
 
 export function hash(x: number) {
     x = (x ^ 61) ^ (x >> 16)
