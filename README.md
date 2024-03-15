@@ -30,7 +30,7 @@ pip install git+https://github.com/openai/CLIP.git
 # python server as backend
 pip3 install torch numpy 'uvicorn[standard]' fastapi pydantic python-multipart Pillow click
 # or 
-cd script && pip3 install -r requirements.txt
+cd scripts && pip3 install -r requirements.txt
 # webui frontend
 npm i
 ```
