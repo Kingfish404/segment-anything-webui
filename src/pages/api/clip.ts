@@ -20,8 +20,9 @@ export default async function handler(
     const filepath = file_list[0]['filepath']
     const readStream = await fs.readFile(filepath)
     const req_data = new FormData()
-    req_data.append('file', new Blob([readStream]), 'image')
-    req_data.append('prompt', fields['prompt'][0])
+    if (fields['prompt']) {
+        req_data.append('prompt', fields['prompt'][0])
+    }
     const res_data = await fetch(
         utils.config.API_URL + '/api/clip',
         {

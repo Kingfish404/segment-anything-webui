@@ -21,7 +21,9 @@ export default async function handler(
     const readStream = await fs.readFile(filepath)
     const req_data = new FormData()
     req_data.append('file', new Blob([readStream]), 'image')
-    req_data.append('box', fields['box'][0] as string)
+    if (fields['box']) {
+        req_data.append('box', fields['box'][0] as string)
+    }
     const res_data = await fetch(
         utils.config.API_URL + '/api/box',
         {
