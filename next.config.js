@@ -8,10 +8,10 @@ const nextConfig = {
       new CopyPlugin({
         patterns: [
           {
-            from: './node_modules/onnxruntime-web/dist/ort-wasm.wasm',
+            from: './node_modules/onnxruntime-web/dist/*.wasm',
             to: 'static/chunks/pages',
           }, {
-            from: './node_modules/onnxruntime-web/dist/ort-wasm-simd.wasm',
+            from: './node_modules/onnxruntime-web/dist/*.wasm',
             to: 'static/chunks/pages',
           },
         ],
