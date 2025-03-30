@@ -15,6 +15,7 @@ from segment_anything import SamPredictor, SamAutomaticMaskGenerator, sam_model_
 from PIL import Image
 from typing_extensions import Annotated
 from threading import Lock
+from skimage import measure
 
 
 class Point(BaseModel):
@@ -62,6 +63,27 @@ def retrieve(
         probs = (100.0 * image_features @ text_features.T)
     return probs[:, 0].softmax(dim=-1)
 
+
+def mask_to_svg(mask: np.ndarray):
+    # https://github.com/Kingfish404/segment-anything-webui/issues/14
+    # Get mask contours
+    contours = measure.find_contours(mask)
+    if not contours:
+        return ""
+
+    # Generate SVG paths
+    paths = []
+    for contour in contours:
+        # Swap x, y coordinates and round to integers
+        contour = np.round(contour[:, [1, 0]]).astype(int)
+        # Build the path string, using spaces instead of commas
+        path = f"M {contour[0][0]} {contour[0][1]}"
+        for point in contour[1:]:
+            path += f" L {point[0]} {point[1]}"
+        path += " Z"  # Close the path
+        paths.append(path)
+
+    return " ".join(paths)
 
 @click.command()
 @click.option('--model',
